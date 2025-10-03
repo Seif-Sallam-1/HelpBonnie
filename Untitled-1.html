@@ -1,0 +1,636 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bonnie - The Solar Flare</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #0f172a; /* slate-900 */
+            color: #e2e8f0; /* slate-200 */
+        }
+        canvas {
+            touch-action: none; /* Prevents scrolling on touch devices */
+            background-color: black;
+        }
+        .video-placeholder {
+            background-color: #000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #94a3b8; /* slate-400 */
+            font-size: 1.25rem;
+            text-align: center;
+        }
+        /* Style for score feedback */
+        .score-flash {
+            transition: all 0.1s ease-in-out;
+            color: #facc15; /* yellow-400 */
+            transform: scale(1.1);
+        }
+        /* Styles for screen transitions */
+        .screen {
+            transition: opacity 0.4s ease-in-out;
+        }
+        .screen.hidden {
+            display: none;
+        }
+        .screen.fading-out {
+            opacity: 0;
+            pointer-events: none;
+        }
+        /* Styles for the win screen canvas */
+        #win-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%; /* This is now safe as the parent has a fixed aspect ratio */
+            z-index: 0;
+            border-radius: 0.5rem; /* match parent */
+        }
+        .gemini-pep-talk-box {
+            background-color: rgba(255, 255, 255, 0.1);
+            border-left: 3px solid #facc15;
+            padding: 0.75rem;
+            margin-top: 1rem;
+            border-radius: 0.25rem;
+            font-style: italic;
+            text-align: left;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+    </style>
+</head>
+<body class="flex items-center justify-center min-h-screen">
+
+    <div class="max-w-4xl mx-auto p-4 w-full">
+
+        <!-- Intro Screen -->
+        <section id="intro-screen" class="screen space-y-4">
+            <h1 class="text-3xl font-semibold">Bonnie — The Solar Flare</h1>
+            <p class="text-gray-300">A short interactive story about Bonnie, a solar flare who apologizes for the harm she caused to Earth.</p>
+            <div class>
+                <div class="bg-slate-800 p-4 rounded-lg text-gray-100">
+                    <h2 class="text-xl font-medium">Story</h2>
+                    <p class="mt-2 text-sm leading-relaxed">
+                        "Hello — I'm Bonnie. Recently I erupted and unintentionally damaged satellites, power lines,
+                        and signals on Earth. I'm sorry. I want to learn how to be kinder to our planet. Can you help me avoid
+                        hurting anything next time?"
+                    </p>
+                    <div class="mt-4">
+                        <label for="player-name" class="block text-sm">Your name</label>
+                        <input id="player-name" class="mt-1 w-full rounded border px-3 py-2 bg-white/5 border-slate-600 focus:ring-2 focus:ring-blue-500 focus:outline-none" placeholder="Enter your name">
+                        <div class="flex flex-wrap gap-2 mt-3">
+                            <button class="flex-grow px-4 py-2 rounded bg-blue-600 hover:bg-blue-700 difficulty-btn" data-difficulty="1">Easy</button>
+                            <button class="flex-grow px-4 py-2 rounded bg-orange-600 hover:bg-orange-700 difficulty-btn" data-difficulty="2">Medium</button>
+                            <button class="flex-grow px-4 py-2 rounded bg-red-600 hover:bg-red-700 difficulty-btn" data-difficulty="3">Hard</button>
+                        </div>
+                    </div>
+                    <p class="mt-4 text-xs text-gray-400">Tip: Use keyboard arrows or drag on the game area to move.</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Game Screen -->
+        <div id="game-screen" class="screen mt-4 hidden">
+            <div class="rounded-lg overflow-hidden shadow-lg bg-slate-800 p-4">
+                <div class="flex justify-between items-center mb-3">
+                    <div id="display-name-hud" class="text-sm text-gray-200">Player: —</div>
+                    <div class="flex gap-2 items-center">
+                        <div id="difficulty-hud" class="text-xs text-gray-200">Difficulty: 1</div>
+                        <button id="pause-btn" class="px-2 py-1 rounded bg-gray-700 hover:bg-gray-600 text-xs">Pause</button>
+                        <button id="exit-btn" class="px-2 py-1 rounded bg-red-600 hover:bg-red-500 text-xs">Exit</button>
+                    </div>
+                </div>
+                <canvas id="game-canvas" class="w-full border rounded border-slate-600" style="aspect-ratio: 800 / 480; display: block;"></canvas>
+                <div class="mt-3 text-gray-200 flex justify-between font-bold">
+                    <span id="score-hud" class="transition-transform duration-100">Score: 0</span>
+                    <span id="lives-hud">Lives: 3</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- End Screen (Win/Lose) -->
+        <div id="end-screen" class="screen mt-4 hidden">
+             <div class="rounded-lg text-gray-100 text-center relative overflow-hidden" style="aspect-ratio: 800 / 480;">
+                <canvas id="win-canvas"></canvas>
+                <div class="relative z-10 p-4 flex flex-col items-center justify-center h-full">
+                    <h3 id="end-title" class="text-3xl font-bold">Game Over</h3>
+                    <p id="end-message" class="mt-2"></p>
+                    <div id="end-buttons" class="mt-4 flex gap-2 justify-center">
+                        <button id="play-again-btn" class="px-4 py-2 rounded bg-green-600 hover:bg-green-700">Play Again</button>
+                        <button id="back-to-story-btn" class="px-4 py-2 rounded bg-gray-600 hover:bg-gray-500">Back to Story</button>
+                    </div>
+                    <div id="pep-talk-container"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    // --- DOM Elements ---
+    const introScreen = document.getElementById('intro-screen');
+    const gameScreen = document.getElementById('game-screen');
+    const endScreen = document.getElementById('end-screen');
+    const canvas = document.getElementById('game-canvas');
+    const ctx = canvas.getContext('2d');
+    const winCanvas = document.getElementById('win-canvas');
+    const winCtx = winCanvas.getContext('2d');
+    const difficultyButtons = document.querySelectorAll('.difficulty-btn');
+    const playerNameInput = document.getElementById('player-name');
+    const pauseBtn = document.getElementById('pause-btn');
+    const exitBtn = document.getElementById('exit-btn');
+    const playAgainBtn = document.getElementById('play-again-btn');
+    const backToStoryBtn = document.getElementById('back-to-story-btn');
+    const pepTalkContainer = document.getElementById('pep-talk-container');
+    
+    // --- HUD Elements ---
+    const scoreHud = document.getElementById('score-hud');
+    const livesHud = document.getElementById('lives-hud');
+    const displayNameHud = document.getElementById('display-name-hud');
+    const difficultyHud = document.getElementById('difficulty-hud');
+    const endTitle = document.getElementById('end-title');
+    const endMessage = document.getElementById('end-message');
+
+    // NEW: Image Asset Loading
+    const images = {};
+    const imageSources = {
+        player: 'images/bonnie.png',
+        satellite: 'images/satellite.png',
+        powerline: 'images/powerline.png',
+        signal: 'images/signal.png'
+    };
+    let imagesLoaded = 0;
+    const totalImages = Object.keys(imageSources).length;
+
+    function loadImages(callback) {
+        difficultyButtons.forEach(btn => btn.disabled = true); // Disable buttons while loading
+        for (const key in imageSources) {
+            images[key] = new Image();
+            images[key].src = imageSources[key];
+            images[key].onload = () => {
+                imagesLoaded++;
+                if (imagesLoaded === totalImages) {
+                    difficultyButtons.forEach(btn => btn.disabled = false); // Re-enable buttons
+                    callback();
+                }
+            };
+            images[key].onerror = () => {
+                console.error(`Failed to load image: ${imageSources[key]}`);
+                // You could display an error to the user here
+            }
+        }
+    }
+
+    // --- Game State ---
+    let phase = 'intro';
+    let displayName = "";
+    let score = 0;
+    let lives = 3;
+    let difficulty = 1;
+    let targetWinScore = 30;
+    let paused = false;
+    let rafId = null;
+    let winRafId = null;
+    let lastTs = 0;
+    let isGameOver = false;
+    
+    // --- Game Objects ---
+    // MODIFIED: Added width and height properties for image rendering
+    const player = { x: 0, y: 0, radius: 32, speed: 350, width: 72, height: 72 };
+    let obstacles = [];
+    let confettiParticles = [];
+    let lastSpawn = 0;
+    
+    // --- Controls ---
+    const keys = { left: false, right: false };
+    const pointer = { active: false, x: 0 };
+
+    // --- Constants ---
+    const CANVAS_W = 800;
+    const CANVAS_H = 480;
+    
+    // --- Game Logic ---
+    function transitionToPhase(newPhase) {
+        const currentScreen = document.querySelector('.screen:not(.hidden)');
+        if (currentScreen) {
+            currentScreen.classList.add('fading-out');
+            setTimeout(() => {
+                currentScreen.classList.remove('fading-out');
+                setPhase(newPhase);
+            }, 400); 
+        } else {
+            setPhase(newPhase);
+        }
+    }
+
+    function setPhase(newPhase) {
+        phase = newPhase;
+        document.querySelectorAll('.screen').forEach(s => s.classList.add('hidden'));
+
+        let screenToShow;
+        if (phase === 'intro') screenToShow = introScreen;
+        else if (phase === 'playing') screenToShow = gameScreen;
+        else if (phase === 'win' || phase === 'lose') screenToShow = endScreen;
+
+        if (screenToShow) {
+            screenToShow.classList.remove('hidden');
+        }
+
+        if (phase === 'playing') {
+            stopWinLoop();
+            startGame();
+        } else {
+            stopGame();
+        }
+        
+        pepTalkContainer.innerHTML = '';
+
+
+        if (phase === 'win') {
+            endTitle.innerHTML = `&#10024; Thank you, ${displayName || 'Friend'}! &#10024;`;
+            endMessage.textContent = "Bonnie learned from you — she won't repeat those mistakes. You helped protect satellites and power systems!";
+            createConfetti();
+            startWinLoop();
+        }
+        
+        if (phase === 'lose') {
+            endTitle.textContent = `It happens — but thanks for trying, ${displayName || 'Friend'}.`;
+            endMessage.textContent = "Bonnie still needs more practice. Try again to help her learn.";
+            pepTalkContainer.innerHTML = `<div class="gemini-pep-talk-box">Bonnie is thinking of something encouraging...</div>`;
+            getPepTalk();
+            stopWinLoop();
+        }
+    }
+
+    function startGame() {
+        score = 0;
+        if (difficulty === 1) lives = 4;
+        else if (difficulty === 2) lives = 3;
+        else lives = 2;
+
+        obstacles = [];
+        confettiParticles = [];
+        lastSpawn = 0;
+        paused = false;
+        isGameOver = false;
+        pauseBtn.textContent = 'Pause';
+        player.x = CANVAS_W / 2;
+        player.y = CANVAS_H - 90;
+        updateHud();
+
+        lastTs = performance.now();
+        rafId = requestAnimationFrame(gameLoop);
+    }
+
+    function stopGame() {
+        if (rafId) {
+            cancelAnimationFrame(rafId);
+            rafId = null;
+        }
+    }
+
+    function startWinLoop() {
+        winCanvas.width = CANVAS_W;
+        winCanvas.height = CANVAS_H;
+        function winLoop(timestamp) {
+            winRafId = requestAnimationFrame(winLoop);
+            winCtx.fillStyle = '#000';
+            winCtx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+
+            for (let i = 0; i < 60; i++) {
+                winCtx.fillStyle = `rgba(255, 255, 255, ${0.2 + Math.random() * 0.4})`;
+                const sx = (i * 73) % CANVAS_W;
+                const sy = (i * 147) % CANVAS_H;
+                winCtx.fillRect((sx + (timestamp * 0.005 * (i % 5 + 1))) % CANVAS_W, sy, i % 3 === 0 ? 2 : 1, i % 3 === 0 ? 2 : 1);
+            }
+            
+            drawAurora(timestamp, winCtx);
+            const bonnieYBob = Math.sin(timestamp * 0.002) * 10;
+            drawBonnie(CANVAS_W - 80, CANVAS_H - 80 + bonnieYBob, winCtx); // MODIFIED: now calls the image drawing function
+            updateAndDrawConfetti(winCtx);
+        }
+        winRafId = requestAnimationFrame(winLoop);
+    }
+
+    function stopWinLoop() {
+        if(winRafId) {
+            cancelAnimationFrame(winRafId);
+            winRafId = null;
+        }
+    }
+
+    function gameLoop(timestamp) {
+        rafId = requestAnimationFrame(gameLoop);
+        if (!timestamp) return;
+        const dt = (timestamp - lastTs) / 1000;
+        lastTs = timestamp;
+        if (dt <= 0 || dt > 0.2 || isNaN(dt)) return;
+        if (paused) return;
+
+        update(dt);
+        draw();
+
+        if (lives <= 0 && !isGameOver) {
+            isGameOver = true;
+            transitionToPhase('lose');
+        }
+        
+        if (score >= targetWinScore && !isGameOver) {
+            isGameOver = true;
+            transitionToPhase('win');
+        }
+    }
+
+    function update(dt) {
+        lastSpawn += dt * 1000;
+        const spawnInterval = Math.max(400, 1100 - difficulty * 200);
+        if (lastSpawn > spawnInterval) {
+            spawnObstacle();
+            lastSpawn = 0;
+        }
+
+        if (pointer.active) {
+            const dx = pointer.x - player.x;
+            player.x += dx * 0.15;
+        } else {
+            if (keys.left) player.x -= player.speed * dt;
+            if (keys.right) player.x += player.speed * dt;
+        }
+        player.x = Math.max(player.width / 2, Math.min(CANVAS_W - player.width / 2, player.x));
+
+        for (let i = obstacles.length - 1; i >= 0; i--) {
+            const ob = obstacles[i];
+            ob.y += ob.speed * dt;
+            
+            // MODIFIED: Switched to a unified circle-vs-rectangle collision check
+            const rectX = ob.x - ob.width / 2;
+            const rectY = ob.y - ob.height / 2;
+            const closestX = Math.max(rectX, Math.min(player.x, rectX + ob.width));
+            const closestY = Math.max(rectY, Math.min(player.y, rectY + ob.height));
+            const dx = player.x - closestX;
+            const dy = player.y - closestY;
+            
+            if ((dx * dx + dy * dy) < (player.radius * player.radius)) {
+                obstacles.splice(i, 1);
+                lives--;
+                updateHud(false);
+            } else if (ob.y > CANVAS_H + ob.height) {
+                obstacles.splice(i, 1);
+                score++;
+                updateHud(true);
+            }
+        }
+    }
+
+    // MODIFIED: This function now draws the pre-loaded player image.
+    function drawBonnie(x, y, targetCtx) {
+        if (images.player && images.player.complete) {
+            targetCtx.drawImage(images.player, x - player.width / 2, y - player.height / 2, player.width, player.height);
+        }
+    }
+
+    // MODIFIED: The draw function now adds a soft white shadow/glow effect
+// MODIFIED: The draw function now applies a stronger shadow specifically to the "signal"
+function draw() {
+    ctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+
+    for (let i = 0; i < 60; i++) {
+        ctx.fillStyle = `rgba(255, 255, 255, ${0.2 + Math.random() * 0.4})`;
+        const sx = (i * 73) % CANVAS_W;
+        const sy = (i * 147) % CANVAS_H;
+        ctx.fillRect((sx + (performance.now() * 0.005 * (i % 5 + 1))) % CANVAS_W, sy, i % 3 === 0 ? 2 : 1, i % 3 === 0 ? 2 : 1);
+    }
+
+    obstacles.forEach(ob => {
+        const img = images[ob.type];
+        if (img && img.complete) {
+            ctx.save(); 
+            ctx.shadowOffsetX = 0; 
+            ctx.shadowOffsetY = 0; 
+
+            // NEW: Check the obstacle type to apply a different shadow strength
+            if (ob.type === "signal") {
+                // Apply a STRONGER shadow for the signal
+                ctx.shadowColor = 'rgba(255, 255, 255, 0.7)';
+                ctx.shadowBlur = 15; // A bigger blur radius!
+            } else {
+                // Apply the NORMAL shadow for satellite and powerline
+                ctx.shadowColor = 'rgba(255, 255, 255, 0.7)'; 
+                ctx.shadowBlur = 15; 
+            }
+
+            ctx.drawImage(img, ob.x - ob.width / 2, ob.y - ob.height / 2, ob.width, ob.height);
+
+            ctx.restore();
+        }
+    });
+
+    drawBonnie(player.x, player.y, ctx);
+}
+    
+    // ... (The confetti and aurora functions remain the same) ...
+
+    function createConfetti() {
+        confettiParticles = [];
+        for (let i = 0; i < 200; i++) {
+            confettiParticles.push({
+                x: CANVAS_W * Math.random(), y: -20,
+                vx: (Math.random() - 0.5) * 4, vy: Math.random() * 5 + 2,
+                color: `hsl(${Math.random() * 360}, 100%, 70%)`,
+                size: Math.random() * 6 + 3, alpha: 1,
+            });
+        }
+    }
+
+    function updateAndDrawConfetti(targetCtx) {
+        targetCtx.globalAlpha = 1;
+        confettiParticles.forEach((p, index) => {
+            p.x += p.vx; p.y += p.vy; p.alpha -= 0.005;
+            if (p.alpha <= 0) confettiParticles.splice(index, 1);
+            else {
+                targetCtx.globalAlpha = p.alpha; targetCtx.fillStyle = p.color;
+                targetCtx.fillRect(p.x, p.y, p.size, p.size);
+            }
+        });
+        targetCtx.globalAlpha = 1;
+    }
+    
+    function drawAurora(progress, targetCtx) {
+        let alpha = 0.4 + Math.sin(progress * 0.0005) * 0.3;
+        
+        const colors = [{ stop: 0, color: 'rgba(74, 222, 128, 0)' }, { stop: 0.5, color: `rgba(74, 222, 128, ${alpha * 0.7})` }, { stop: 1, color: 'rgba(74, 222, 128, 0)' }];
+        const colors2 = [{ stop: 0, color: 'rgba(96, 165, 250, 0)' }, { stop: 0.5, color: `rgba(96, 165, 250, ${alpha * 0.6})` }, { stop: 1, color: 'rgba(96, 165, 250, 0)' }];
+        drawWave(colors, 0.4, 0.05, 50, 40, targetCtx);
+        drawWave(colors2, 0.5, -0.03, 40, 50, targetCtx);
+    }
+
+    function drawWave(colorStops, yFactor, speed, amplitude, lineWidth, targetCtx) {
+        const gradient = targetCtx.createLinearGradient(0, 0, CANVAS_W, 0);
+        colorStops.forEach(cs => gradient.addColorStop(cs.stop, cs.color));
+        targetCtx.strokeStyle = gradient; targetCtx.lineWidth = lineWidth + Math.sin(performance.now() * 0.001) * 10;
+        targetCtx.lineCap = 'round'; targetCtx.filter = 'blur(10px)'; targetCtx.beginPath();
+        const yOffset = CANVAS_H * yFactor, xOffset = performance.now() * speed;
+        targetCtx.moveTo(-10, yOffset + Math.sin(xOffset * 0.1) * (amplitude / 2));
+        for (let x = 0; x < CANVAS_W + 20; x += 20) {
+            const y = yOffset + Math.sin((x + xOffset) * 0.02) * amplitude;
+            targetCtx.lineTo(x, y);
+        }
+        targetCtx.stroke(); targetCtx.filter = 'none';
+    }
+
+    // MODIFIED: Reverted to a simpler version without the unused shadowOffset
+    function spawnObstacle() {
+        const types = ["satellite", "powerline", "signal"];
+        const type = types[Math.floor(Math.random() * types.length)];
+        const x = Math.random() * (CANVAS_W - 80) + 40;
+        const speed = 60 + Math.random() * 80 + difficulty * 20;
+
+        let width, height;
+        if (type === "satellite") {
+            width = 60; height = 60;
+        } else if (type === "powerline") {
+            width = 60; height = 60;
+        } else { // signal
+            width = 60; height = 60;
+        }
+        obstacles.push({ x, y: -height, speed, type, width, height });
+    }
+    
+    function updateHud(flashScore = false) {
+        if (flashScore) {
+            scoreHud.classList.add('score-flash');
+            setTimeout(() => scoreHud.classList.remove('score-flash'), 200);
+        }
+        scoreHud.textContent = `Score: ${score}/${targetWinScore}`;
+        livesHud.textContent = `Lives: ${lives}`;
+        displayNameHud.textContent = `Player: ${displayName || '—'}`;
+        difficultyHud.textContent = `Difficulty: ${difficulty === 1 ? 'Easy' : difficulty === 2 ? 'Medium' : 'Hard'}`;
+    }
+    
+    async function getPepTalk() {
+        const userQuery = `My friend ${displayName || 'Friend'} just lost while trying to help me (I'm Bonnie, a friendly solar flare). Write a short, quirky, and encouraging pep talk (2-3 sentences) for them.`;
+        const systemPrompt = "You are Bonnie, a friendly, energetic, and slightly clumsy solar flare character in a video game. Your tone is super encouraging and a little bit spacey. Use exclamation points and space-themed puns if you can!";
+
+        // IMPORTANT: You need to add your own Google AI API key here for this feature to work.
+        const apiKey = "";
+        const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`;
+
+        // NOTE: I updated the model name to gemini-1.5-flash-latest, which is a common choice.
+
+        if (!apiKey) {
+            pepTalkContainer.innerHTML = `<div class="gemini-pep-talk-box">Bonnie says: 'Don't worry, you're a star! Let's give it another go! We'll be out-of-this-world great next time!'</div>`;
+            return;
+        }
+
+        const payload = {
+            contents: [{ parts: [{ text: userQuery }] }],
+            systemInstruction: { parts: [{ text: systemPrompt }] },
+        };
+
+        try {
+            const response = await fetch(apiUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            const result = await response.json();
+            const text = result.candidates?.[0]?.content?.parts?.[0]?.text;
+            
+            if (text) {
+                 pepTalkContainer.innerHTML = `<div class="gemini-pep-talk-box"><canvas id="pep-talk-bonnie" width="60" height="60"></canvas><p>${text}</p></div>`;
+                 const pepTalkBonnieCanvas = document.getElementById('pep-talk-bonnie');
+                 if(pepTalkBonnieCanvas) {
+                     const pepTalkCtx = pepTalkBonnieCanvas.getContext('2d');
+                     const originalRadius = player.radius;
+                     const originalWidth = player.width;
+                     const originalHeight = player.height;
+
+                     player.width = 50; player.height = 50; // smaller bonnie for the box
+                     drawBonnie(30, 30, pepTalkCtx);
+                     player.width = originalWidth; player.height = originalHeight; // reset bonnie size
+                 }
+            } else {
+                throw new Error('No content received.');
+            }
+        } catch (error) {
+            console.error("Gemini API call failed:", error);
+            pepTalkContainer.innerHTML = `<div class="gemini-pep-talk-box">Oops! My comms signal got scrambled. Try again in a bit!</div>`;
+        }
+    }
+
+    function init() {
+        canvas.width = CANVAS_W;
+        canvas.height = CANVAS_H;
+
+        // NEW: We start the image loading process here.
+        loadImages(() => {
+            console.log("All images loaded and ready!");
+            // The game is now ready to be started by the user.
+        });
+
+        difficultyButtons.forEach(button => {
+            button.addEventListener('click', () => {
+                difficulty = parseInt(button.dataset.difficulty);
+                if (difficulty === 1) targetWinScore = 30;
+                else if (difficulty === 2) targetWinScore = 40;
+                else targetWinScore = 50;
+                displayName = playerNameInput.value.trim() || "Friend";
+                transitionToPhase('playing');
+            });
+        });
+
+        pauseBtn.addEventListener('click', () => {
+            paused = !paused;
+            pauseBtn.textContent = paused ? 'Resume' : 'Pause';
+        });
+        
+        exitBtn.addEventListener('click', () => transitionToPhase('intro'));
+        playAgainBtn.addEventListener('click', () => transitionToPhase('playing'));
+        backToStoryBtn.addEventListener('click', () => transitionToPhase('intro'));
+
+        window.addEventListener('keydown', e => {
+            if (e.key === 'ArrowLeft' || (e.key && e.key.toLowerCase() === 'a')) keys.left = true;
+            if (e.key === 'ArrowRight' || (e.key && e.key.toLowerCase() === 'd')) keys.right = true;
+            if (e.code === 'Space' && phase === 'playing') {
+                e.preventDefault(); // Prevent spacebar from scrolling the page
+                paused = !paused;
+                pauseBtn.textContent = paused ? 'Resume' : 'Pause';
+            }
+        });
+        window.addEventListener('keyup', e => {
+            if (e.key === 'ArrowLeft' || (e.key && e.key.toLowerCase() === 'a')) keys.left = false;
+            if (e.key === 'ArrowRight' || (e.key && e.key.toLowerCase() === 'd')) keys.right = false;
+        });
+
+        function getPointerX(e) {
+            const rect = canvas.getBoundingClientRect();
+            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            return (clientX - rect.left) * (CANVAS_W / rect.width);
+        }
+        function handlePointerDown(e) { if (phase !== 'playing') return; e.preventDefault(); pointer.active = true; pointer.x = getPointerX(e); }
+        function handlePointerMove(e) { if (!pointer.active || phase !== 'playing') return; e.preventDefault(); pointer.x = getPointerX(e); }
+        function handlePointerUp() { pointer.active = false; }
+
+        canvas.addEventListener('pointerdown', handlePointerDown);
+        window.addEventListener('pointermove', handlePointerMove);
+        window.addEventListener('pointerup', handlePointerUp);
+        canvas.addEventListener('touchstart', handlePointerDown, { passive: false });
+        window.addEventListener('touchmove', handlePointerMove, { passive: false });
+        window.addEventListener('touchend', handlePointerUp);
+        
+        setPhase('intro');
+    }
+
+    init();
+</script>
+</body>
+</html>
+
